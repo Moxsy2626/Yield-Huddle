@@ -10,3 +10,8 @@ Thumbs.db
 src-tauri/icons/icon.icns
 src-tauri/icons/icon.ico
 src-tauri/icons/icon.png
+node_modules/
+dist/
+src-tauri/target/
+.DS_Store
+*.log
