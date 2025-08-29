@@ -70,8 +70,9 @@ export default tseslint.config([
     },
   },
 ])
-````
+```
 >>>>>>> 61f4c04 (chore: bootstrap scrap-control (vite+react-ts+pwa+tauri+sqlite))
 test
 test status checks
 test status checks
+trigger CI
