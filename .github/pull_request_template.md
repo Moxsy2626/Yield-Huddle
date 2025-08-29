@@ -1,28 +1,10 @@
-\## Objetivo
+## Objetivo
+## Cambios
+## Cómo probar
+1.
+2.
 
-<!-- Qué resuelve este PR -->
-
-
-
-\## Cambios
-
-\- ...
-
-
-
-\## Cómo probar
-
-1\. ...
-
-
-
-\## Checklist
-
-\- \[ ] Tests/Build OK
-
-\- \[ ] Conv. commits usados
-
-\- \[ ] Docs/Changelog actualizado
-
-
-
+## Checklist
+- [ ] Tests/Build OK
+- [ ] Conventional commits
+- [ ] Docs/Changelog
