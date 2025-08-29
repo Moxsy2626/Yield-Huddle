@@ -1,0 +1,1 @@
+export default function DailyPage() { return <h2>Dashboard Diario</h2> }

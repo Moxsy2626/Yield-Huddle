@@ -1,16 +1,25 @@
-<<<<<<< HEAD
 # Yield-Huddle
-App de control de scrap
-=======
-# React + TypeScript + Vite
+App de control de scrap.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Tech stack
+- React + TypeScript + Vite
+- Material UI (MUI)
+- Zustand (estado), React Query (datos), Recharts (gráficas)
+- sql.js + IndexedDB (persistencia local)
+- Tauri (empaquetado escritorio)
 
-Currently, two official plugins are available:
+## Scripts útiles
+- `npm run dev` – modo desarrollo (web)
+- `npm run build` – build web
+- `npm run tauri dev` – app de escritorio en dev
+- `npm run tauri build` – instalador de escritorio
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Vistas previstas
+- Diario / Semanal / Mensual
+- Minuta (asistencia y acciones)
+- Unidades sin clasificación
 
+<<<<<<< HEAD
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
@@ -76,3 +85,8 @@ test
 test status checks
 test status checks
 trigger CI
+=======
+## Notas
+- Commits: Conventional Commits
+- Ramas: GitFlow (`develop`, `feature/*`, etc.)
+>>>>>>> db3db1e2ee2bd14bbf6497b43d7febe2ac05921e

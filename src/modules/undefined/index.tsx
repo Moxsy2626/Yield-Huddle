@@ -1,0 +1,1 @@
+export default function UndefinedUnitsPage() { return <h2>Unidades sin clasificación</h2> }
