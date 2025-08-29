@@ -1,7 +1,7 @@
 {
   "name": "scrap-control",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,9 +13,7 @@
     "format": "prettier --write ."
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,css,md,json}": [
-      "prettier --write"
-    ]
+  "*.{ts,tsx,js,jsx,css,md,json}": ["prettier --write"]
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
