@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+// src/features/daily/DailyPage.tsx
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Card, CardContent, CardHeader, Typography, Box, Stack,
-  MenuItem, Select, InputLabel, FormControl, TextField, Divider
+  MenuItem, Select, InputLabel, FormControl, TextField, Divider,
+  Dialog, DialogTitle, DialogContent, IconButton,
+  Table, TableHead, TableRow, TableCell, TableBody,
+  alpha, useTheme, Tooltip as MuiTooltip
 } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -11,110 +17,107 @@ import dayjs, { type Dayjs } from "dayjs";
 import type { SelectChangeEvent } from "@mui/material/Select";
 
 import { useFiltersStore, type Turno } from "@/store/filters";
-import { queryDaily } from "@/data/queries/queryDaily";
-import type { DailyResult } from "@/data/queries/queryDaily";
-import { loadDb, type SQLDatabase } from "@/data/sqlite";
 
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell
-} from "recharts";
+// Componentes (presentación)
+import DailyChart from "./components/DailyChart";
+import { FilterAuto } from "./components/details/FilterAuto";
+import { SupervisorRow } from "./components/details/SupervisorRow";
+import { TopSpecialistsChart } from "./components/TopSpecialistsChart";
 
-import DailyTable from "./components/DailyTable"; // tabla plana (más adelante TreeData)
+// Puertos / Tipos
+import type { IDailyService } from "./ports/IDailyService";
+import type { DailyResult, ScrapRow } from "./ports/types";
 
-// Colores (luego migraremos a tokens del theme)
+// Infraestructura (adapter por defecto)
+import { DailyServiceMockAdapter } from "./components/data/queries/DailyService.mock";
+
+// Usecases (dominio)
+import { buildMap } from "./usecases/buildMap";
+import { aggregateCantidad } from "./usecases/aggregate";
+import { computeYieldBy } from "./usecases/computeYield";
+
+/* =================== Paletas sobrias ===================== */
 const CLASS_COLORS: Record<string, string> = {
-  Handling: "#6aa84f",
-  Workmanship: "#3c78d8",
-  Technical: "#cc0000",
-  Training: "#f1c232",
-  "Not defined": "#999999",
+  Handling:   "#2E7D32",
+  Workmanship:"#1565C0",
+  Technical:  "#B71C1C",
+  Training:   "#B26A00",
+  "Not defined": "#607D8B",
 };
-
-// Tipo base de fila (lo infiero de tu DataGrid actual)
-type ScrapRow = {
-  id: string | number;
-  scrapGroup?: string;
-  classification?: string;
-  supervisor?: string;
-  specialist?: string;
-  station?: string;          // opcional (si viene)
-  units: number;
-  [k: string]: any;
+const GROUP_PALETTE = ["#0F766E","#1D4ED8","#6D28D9","#B45309","#B91C1C","#2563EB","#0EA5E9","#475569"];
+const SUPERVISOR_PALETTE = ["#1E40AF","#0E7490","#7C3AED","#B45309","#9333EA","#047857","#2563EB","#7C2D12","#334155","#0F766E"];
+const colorHash = (s: string, pal: string[]) => {
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return pal[h % pal.length];
 };
+const uniq = <T,>(arr: (T | null | undefined)[]) => Array.from(new Set(arr.filter(Boolean) as T[]));
 
-type TopItem = { especialista: string; qty: number; clasificacion: string };
+/* ===================== Página ============================ */
+export default function DailyPage({ service }: { service?: IDailyService }) {
+  const theme = useTheme();
 
-// Helper para opciones únicas
-function uniq<T>(arr: (T | undefined | null)[]) {
-  return Array.from(new Set(arr.filter(Boolean) as T[]));
-}
+  // Puerto con implementación por defecto (DIP)
+  const dailyService: IDailyService = service ?? DailyServiceMockAdapter;
 
-export default function DailyPage() {
-  // ===== Filtros globales existentes (fecha/turno) =====
+  // Filtros globales (store)
   const date = useFiltersStore((s) => s.date);
   const shift = useFiltersStore((s) => s.shift);
   const setDate = useFiltersStore((s) => s.setDate);
   const setShift = useFiltersStore((s) => s.setShift);
   const dayjsDate = useMemo<Dayjs>(() => dayjs(date), [date]);
 
-  // ===== Estado local =====
-  const [db, setDb] = useState<SQLDatabase | null>(null);
+  // Estado local
   const [data, setData] = useState<DailyResult | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Confirmadas para yield-loss
-  const [confirmadas, setConfirmadas] = useState<number>(0);
+  // Confirmadas (placeholder "0")
+  const [confirmadasStr, setConfirmadasStr] = useState<string>("");
 
-  // Filtro del Top (clasificación)
-  const [clasForTop, setClasForTop] = useState<string>("ALL");
-
-  // Filtros extra (cliente)
+  // Filtros de UI
   const [fSupervisor, setFSupervisor] = useState<string>("ALL");
   const [fSpecialist, setFSpecialist] = useState<string>("ALL");
-  const [fClas, setFClas]         = useState<string>("ALL");
-  const [fGroup, setFGroup]       = useState<string>("ALL");
-  const [fStation, setFStation]   = useState<string>("ALL");
+  const [fClas, setFClas] = useState<string>("ALL");
+  const [fGroup, setFGroup] = useState<string>("ALL");
+  const [fStation, setFStation] = useState<string>("ALL");
 
-  // ===== Cargar DB una vez =====
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (db) return;
-      const database = await loadDb();
-      if (!cancelled) setDb(database);
-    })();
-    return () => { cancelled = true; };
-  }, [db]);
+  // Modal
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTitle, setDetailTitle] = useState<string>("");
+  const [detailRows, setDetailRows] = useState<ScrapRow[]>([]);
 
-  // ===== Consultar datos =====
-  useEffect(() => {
-    if (!db) return;
-    (async () => {
-      const result = await queryDaily(db, {
-        date,
-        shift: shift === "ALL" ? undefined : shift, // mismo comportamiento que ya tenías
-      });
-      setData(result);
-    })();
-  }, [db, date, shift]);
+  const openDetail = useCallback((title: string, rows: ScrapRow[]) => {
+    setDetailTitle(title);
+    setDetailRows(rows);
+    setDetailOpen(true);
+  }, []);
 
-  // ===== Filas base del día (siempre guardo una copia segura) =====
-  const rows: ScrapRow[] = useMemo(() => {
-    // si DailyResult no trae filas, devuelvo arreglo vacío
-    return ((data as any)?.rows ?? []) as ScrapRow[];
-  }, [data]);
+  // Carga datos (solo cuando cambian día/turno o refresco)
+  const fetchDaily = useCallback(async () => {
+    setLoading(true);
+    const result = await dailyService.queryDaily({
+      date,
+      shift: shift === "ALL" ? undefined : shift,
+    });
+    setData(result);
+    setLoading(false);
+  }, [dailyService, date, shift]);
 
-  // ===== Construir opciones únicas para los selects =====
-  const options = useMemo(() => {
-    return {
-      supervisors: uniq<string>(rows.map(r => r.supervisor)),
-      specialists: uniq<string>(rows.map(r => r.specialist)),
-      classifications: uniq<string>(rows.map(r => r.classification)),
-      groups: uniq<string>(rows.map(r => r.scrapGroup)),
-      stations: uniq<string>(rows.map(r => r.station)),
-    };
-  }, [rows]);
+  useEffect(() => { fetchDaily(); }, [fetchDaily]);
+  const onRefresh = useCallback(() => { fetchDaily(); }, [fetchDaily]);
 
-  // ===== Aplicar filtros locales sobre filas =====
+  // Datos base
+  const rows: ScrapRow[] = useMemo(() => (data?.rows ?? []) as ScrapRow[], [data]);
+
+  // Opciones filtros
+  const options = useMemo(() => ({
+    supervisors:   uniq<string>(rows.map(r => r.supervisor)),
+    specialists:   uniq<string>(rows.map(r => r.specialist)),
+    classifications: uniq<string>(rows.map(r => r.classification)),
+    groups:        uniq<string>(rows.map(r => r.scrapGroup)),
+    stations:      uniq<string>(rows.map(r => r.station)),
+  }), [rows]);
+
+  // Filtrado (se recalcula solo con filtros/rows)
   const filteredRows = useMemo(() => {
     return rows.filter(r => {
       if (fSupervisor !== "ALL" && r.supervisor !== fSupervisor) return false;
@@ -126,83 +129,98 @@ export default function DailyPage() {
     });
   }, [rows, fSupervisor, fSpecialist, fClas, fGroup, fStation]);
 
-  // ===== Recalcular agregados desde filteredRows =====
-  const byClas = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of filteredRows) {
-      const key = r.classification ?? "Not defined";
-      m.set(key, (m.get(key) ?? 0) + (Number(r.units) || 0));
-    }
-    return Array.from(m.entries()).map(([clasificacion, qty]) => ({ clasificacion, qty }));
-  }, [filteredRows]);
+  // Mapas (para abrir modal sin recalcular en clics)
+  const mapClas     = useMemo(() => buildMap(filteredRows, r => (r.classification ?? "Not defined")), [filteredRows]);
+  const mapGroup    = useMemo(() => buildMap(filteredRows, r => (r.scrapGroup ?? "Not defined")), [filteredRows]);
+  const mapStation  = useMemo(() => buildMap(filteredRows, r => (r.station ?? "N/D")), [filteredRows]);
+  const mapSup      = useMemo(() => buildMap(filteredRows, r => (r.supervisor ?? "N/D")), [filteredRows]);
+  const mapSpec     = useMemo(() => buildMap(filteredRows, r => (r.specialist ?? "N/D")), [filteredRows]);
 
-  const byGroup = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of filteredRows) {
-      const key = r.scrapGroup ?? "Not defined";
-      m.set(key, (m.get(key) ?? 0) + (Number(r.units) || 0));
-    }
-    return Array.from(m.entries()).map(([scrapGroup, qty]) => ({ scrapGroup, qty }));
-  }, [filteredRows]);
+  // Agregados (Cantidad)
+  const byClas      = useMemo(() => aggregateCantidad(mapClas).map(x => ({ clasificacion: x.key, cantidad: x.cantidad })), [mapClas]);
+  const byGroup     = useMemo(() => aggregateCantidad(mapGroup).map(x => ({ scrapGroup: x.key, cantidad: x.cantidad })), [mapGroup]);
+  const byStation   = useMemo(() => aggregateCantidad(mapStation).map(x => ({ station: x.key, cantidad: x.cantidad })), [mapStation]);
+  const bySupervisor= useMemo(() => aggregateCantidad(mapSup).map(x => ({ supervisor: x.key, cantidad: x.cantidad })), [mapSup]);
 
-  const totalScrap = useMemo(
-    () => filteredRows.reduce((acc, r) => acc + (Number(r.units) || 0), 0),
-    [filteredRows]
+  // Top especialistas (Top 10)
+  const topItems = useMemo(
+    () =>
+      Object.entries(mapSpec)
+        .map(([especialista, arr]) => ({
+          especialista,
+          cantidad: arr.reduce((a, r) => a + (r.units || 0), 0),
+          clasificacion: arr[0]?.classification ?? "Not defined",
+        }))
+        .sort((a, b) => b.cantidad - a.cantidad)
+        .slice(0, 10),
+    [mapSpec]
   );
 
-  const topItems: TopItem[] = useMemo(() => {
-    const m = new Map<string, { qty: number; clasificacion: string }>();
-    for (const r of filteredRows) {
-      const esp = String(r.specialist ?? "N/D");
-      const clas = String(r.classification ?? "Not defined");
-      const prev = m.get(esp) ?? { qty: 0, clasificacion: clas };
-      m.set(esp, { qty: prev.qty + (Number(r.units) || 0), clasificacion: clas });
-    }
-    return Array.from(m.entries())
-      .map(([especialista, v]) => ({ especialista, qty: v.qty, clasificacion: v.clasificacion }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 10);
-  }, [filteredRows]);
+  // Totales + Yield
+  const totalScrap = useMemo(() => filteredRows.reduce((a, r) => a + (r.units || 0), 0), [filteredRows]);
+  const confirmadas = Number(confirmadasStr || 0);
+  const baseYield = confirmadas + totalScrap;
 
-  const filteredTopItems = useMemo(() => {
-    if (clasForTop === "ALL") return topItems;
-    return topItems.filter(t => t.clasificacion === clasForTop);
-  }, [topItems, clasForTop]);
+  const yieldByClas = useMemo(() =>
+    computeYieldBy(
+      byClas.map(x => ({ key: x.clasificacion, cantidad: x.cantidad })), baseYield
+    ), [byClas, baseYield]);
 
-  // ===== Yield total y por clasificación =====
-  const yieldTotal = useMemo(() => {
-    const base = confirmadas + totalScrap;
-    return base > 0 ? (totalScrap / base) * 100 : 0;
-  }, [confirmadas, totalScrap]);
+  const yieldByGroup = useMemo(() =>
+    computeYieldBy(
+      byGroup.map(x => ({ key: x.scrapGroup, cantidad: x.cantidad })), baseYield
+    ), [byGroup, baseYield]);
 
-  const yieldByClas = useMemo(() => {
-    const base = confirmadas + totalScrap;
-    return byClas.map(row => ({
-      clasificacion: row.clasificacion,
-      scrap: row.qty,
-      yieldPct: base > 0 ? (row.qty / base) * 100 : 0,
-    }));
-  }, [byClas, confirmadas, totalScrap]);
+  const yieldTotal = useMemo(() =>
+    baseYield > 0 ? (totalScrap / baseYield) * 100 : 0,
+    [totalScrap, baseYield]
+  );
 
-  // ===== Handlers =====
-  const handleShiftChange = (e: SelectChangeEvent<Turno>) => setShift(e.target.value as Turno);
+  /* ---------- estilos tarjetas ---------- */
+  const cardSx = {
+    borderRadius: 3,
+    boxShadow: `0 8px 24px ${alpha(theme.palette.common.black, 0.08)}`,
+    overflow: "hidden",
+  } as const;
 
+  const headerSx = {
+    pb: 0,
+    background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.10)}, transparent)`,
+  } as const;
+
+  /* ================= RENDER ================= */
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Stack spacing={2}>
-        <Typography variant="h5">Daily – Diario</Typography>
+        {/* Header con refresh */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Typography variant="h5" sx={{ fontWeight: 800 }}>Daily – Diario</Typography>
+          <MuiTooltip title={loading ? "Cargando..." : "Refrescar datos"}>
+            <span>
+              <IconButton onClick={onRefresh} disabled={loading} size="small" aria-label="refresh">
+                <RefreshIcon />
+              </IconButton>
+            </span>
+          </MuiTooltip>
+        </Stack>
 
-        {/* Filtros principales (fecha/turno) */}
-        <Card>
-          <CardHeader title="Filtros" />
+        {/* Filtros */}
+        <Card sx={cardSx}>
+          <CardHeader title="Filtros" sx={headerSx} />
           <CardContent>
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
               <Box sx={{ width: 220 }}>
-                <DatePicker label="Día" value={dayjsDate} onChange={(d) => d && setDate(d.toDate())} />
+                <DatePicker
+                  label="Día"
+                  value={dayjsDate}
+                  onChange={(d) => d && setDate(d.startOf("day").toDate())}
+                />
               </Box>
+
               <FormControl sx={{ width: 160 }}>
                 <InputLabel id="shift-label">Turno</InputLabel>
-                <Select<Turno> labelId="shift-label" label="Turno" value={shift} onChange={handleShiftChange}>
+                <Select<Turno> labelId="shift-label" label="Turno" value={shift}
+                                onChange={(e: SelectChangeEvent<Turno>) => setShift(e.target.value as Turno)}>
                   <MenuItem value="ALL">Todos</MenuItem>
                   <MenuItem value="A">A</MenuItem>
                   <MenuItem value="B">B</MenuItem>
@@ -210,147 +228,27 @@ export default function DailyPage() {
                 </Select>
               </FormControl>
 
-              {/* Filtros extra */}
-              <FormControl sx={{ width: 200 }}>
-                <InputLabel id="f-supervisor">Supervisor</InputLabel>
-                <Select labelId="f-supervisor" label="Supervisor" value={fSupervisor} onChange={e => setFSupervisor(String(e.target.value))}>
-                  <MenuItem value="ALL">Todos</MenuItem>
-                  {options.supervisors.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                </Select>
-              </FormControl>
-
-              <FormControl sx={{ width: 200 }}>
-                <InputLabel id="f-specialist">Especialista</InputLabel>
-                <Select labelId="f-specialist" label="Especialista" value={fSpecialist} onChange={e => setFSpecialist(String(e.target.value))}>
-                  <MenuItem value="ALL">Todos</MenuItem>
-                  {options.specialists.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                </Select>
-              </FormControl>
-
-              <FormControl sx={{ width: 200 }}>
-                <InputLabel id="f-clas">Clasificación</InputLabel>
-                <Select labelId="f-clas" label="Clasificación" value={fClas} onChange={e => setFClas(String(e.target.value))}>
-                  <MenuItem value="ALL">Todas</MenuItem>
-                  {options.classifications.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                </Select>
-              </FormControl>
-
-              <FormControl sx={{ width: 200 }}>
-                <InputLabel id="f-group">Scrap Group</InputLabel>
-                <Select labelId="f-group" label="Scrap Group" value={fGroup} onChange={e => setFGroup(String(e.target.value))}>
-                  <MenuItem value="ALL">Todos</MenuItem>
-                  {options.groups.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                </Select>
-              </FormControl>
-
-              <FormControl sx={{ width: 200 }}>
-                <InputLabel id="f-station">Estación</InputLabel>
-                <Select labelId="f-station" label="Estación" value={fStation} onChange={e => setFStation(String(e.target.value))}>
-                  <MenuItem value="ALL">Todas</MenuItem>
-                  {options.stations.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                </Select>
-              </FormControl>
+              <FilterAuto label="Supervisor"  value={fSupervisor}  onChange={setFSupervisor}  options={options.supervisors} />
+              <FilterAuto label="Especialista" value={fSpecialist} onChange={setFSpecialist} options={options.specialists} />
+              <FilterAuto label="Clasificación" value={fClas} onChange={setFClas} options={options.classifications} />
+              <FilterAuto label="Scrap Group" value={fGroup} onChange={setFGroup} options={options.groups} />
+              <FilterAuto label="Estación"     value={fStation} onChange={setFStation} options={options.stations} />
             </Stack>
           </CardContent>
         </Card>
 
-        {/* Gráfico por Clasificación */}
-        <Card>
-          <CardHeader title="Scrap por Clasificación" />
-          <CardContent>
-            <Box sx={{ height: 280 }}>
-              <ResponsiveContainer>
-                <BarChart data={byClas}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="clasificacion" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="qty">
-                    {byClas.map((e, i) => (
-                      <Cell key={i} fill={CLASS_COLORS[e.clasificacion] ?? "#888"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </Box>
-          </CardContent>
-        </Card>
-
-        {/* Gráfico por Scrap Group */}
-        <Card>
-          <CardHeader title="Scrap por Scrap Group" />
-          <CardContent>
-            <Box sx={{ height: 280 }}>
-              <ResponsiveContainer>
-                <BarChart data={byGroup}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="scrapGroup" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="qty" />
-                </BarChart>
-              </ResponsiveContainer>
-            </Box>
-          </CardContent>
-        </Card>
-
-        {/* Top de Especialistas con filtro de Clasificación */}
-        <Card>
-          <CardHeader
-            title="Top de Especialistas (Top 10)"
-            action={
-              <FormControl sx={{ width: 220 }}>
-                <InputLabel id="clas-top">Clasificación</InputLabel>
-                <Select
-                  labelId="clas-top"
-                  label="Clasificación"
-                  value={clasForTop}
-                  onChange={(e) => setClasForTop(String(e.target.value))}
-                >
-                  <MenuItem value="ALL">Todas</MenuItem>
-                  {options.classifications.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                </Select>
-              </FormControl>
-            }
-          />
-          <CardContent>
-            {filteredTopItems.length === 0 ? (
-              <Typography variant="body2">Sin datos para el día/turno seleccionados.</Typography>
-            ) : (
-              <Box sx={{ height: 340 }}>
-                <ResponsiveContainer>
-                  <BarChart data={filteredTopItems} layout="vertical" margin={{ left: 80, right: 20, top: 10, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="especialista" />
-                    <Tooltip />
-                    <Bar dataKey="qty" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Box>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Tabla de registros (plana por ahora) */}
-        <Card>
-          <CardHeader title="Detalle de registros" />
-          <CardContent>
-            <DailyTable rows={filteredRows as any} />
-          </CardContent>
-        </Card>
-
-        {/* Totales + Yield Loss */}
-        <Card>
-          <CardHeader title="Totales del día" />
+        {/* Yield (debajo de filtros) */}
+        <Card sx={cardSx}>
+          <CardHeader title="Totales / Yield" sx={headerSx} />
           <CardContent>
             <Stack direction="row" spacing={3} alignItems="center" flexWrap="wrap">
               <Typography>Scrap total: <b>{totalScrap}</b></Typography>
               <TextField
                 type="number"
                 label="Confirmadas"
-                value={confirmadas}
-                onChange={(e) => setConfirmadas(Number(e.target.value || 0))}
+                value={confirmadasStr}
+                onChange={(e) => setConfirmadasStr(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="0"
                 sx={{ width: 180 }}
               />
               <Typography>Yield Loss total: <b>{yieldTotal.toFixed(2)}%</b></Typography>
@@ -361,14 +259,132 @@ export default function DailyPage() {
             <Typography variant="subtitle2" gutterBottom>Yield por Clasificación</Typography>
             <ul style={{ margin: 0 }}>
               {yieldByClas.map(r => (
-                <li key={r.clasificacion}>
-                  {r.clasificacion}: {r.yieldPct.toFixed(2)}% (scrap {r.scrap})
+                <li key={r.key}>
+                  {r.key}: {r.yieldPct.toFixed(2)}% (scrap {r.cantidad})
+                </li>
+              ))}
+            </ul>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="subtitle2" gutterBottom>Yield por Scrap Group</Typography>
+            <ul style={{ margin: 0 }}>
+              {yieldByGroup.map(r => (
+                <li key={r.key}>
+                  {r.key}: {r.yieldPct.toFixed(2)}% (scrap {r.cantidad})
                 </li>
               ))}
             </ul>
           </CardContent>
         </Card>
+
+        {/* Clasificación */}
+        <DailyChart
+          title="Scrap por Clasificación"
+          rows={filteredRows}
+          groupBy="classification"
+          colorBy={(label) => CLASS_COLORS[label] ?? "#1565C0"}
+          onBarClick={({ group }) => openDetail(`Detalle • Clasificación: ${group}`, mapClas[group] ?? [])}
+        />
+
+        {/* Scrap Group (entre clasificación y estación) */}
+        <DailyChart
+          title="Scrap por Scrap Group"
+          rows={filteredRows}
+          groupBy="scrapGroup"
+          colorBy={(label) => colorHash(label, GROUP_PALETTE)}
+          onBarClick={({ group }) => openDetail(`Detalle • Scrap Group: ${group}`, mapGroup[group] ?? [])}
+        />
+
+        {/* Estación */}
+        <DailyChart
+          title="Scrap por Estación"
+          rows={filteredRows}
+          groupBy="station"
+          colorBy={(label) => colorHash(label, GROUP_PALETTE)}
+          onBarClick={({ group }) => openDetail(`Detalle • Estación: ${group}`, mapStation[group] ?? [])}
+        />
+
+        {/* Supervisor */}
+        <DailyChart
+          title="Scrap por Supervisor"
+          rows={filteredRows}
+          groupBy="supervisor"
+          colorBy={(label) => colorHash(label, SUPERVISOR_PALETTE)}
+          onBarClick={({ group }) => openDetail(`Detalle • Supervisor: ${group}`, mapSup[group] ?? [])}
+        />
+
+        {/* Top especialistas (vertical/columnas) */}
+        <TopSpecialistsChart
+          items={topItems}
+          onBarClick={(esp) => openDetail(`Detalle • Especialista: ${esp}`, mapSpec[esp] ?? [])}
+          colorBy={(it) => CLASS_COLORS[it.clasificacion ?? "Not defined"] ?? "#1565C0"}
+        />
       </Stack>
+
+      {/* Modal de detalles (agrupado por Supervisor) */}
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle sx={{ pr: 6 }}>
+          {detailTitle}
+          <IconButton aria-label="close" onClick={() => setDetailOpen(false)} sx={{ position: "absolute", right: 8, top: 8 }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+    {/* =============== Modal de detalles =============== */}
+<Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth maxWidth="md">
+  <DialogTitle sx={{ pr: 6 }}>
+    {detailTitle}
+    <IconButton
+      aria-label="close"
+      onClick={() => setDetailOpen(false)}
+      sx={{ position: "absolute", right: 8, top: 8 }}
+    >
+      <CloseIcon />
+    </IconButton>
+  </DialogTitle>
+
+  {/* Dentro de <DialogContent dividers> … */}
+  <DialogContent dividers>
+    <Stack spacing={1} sx={{ mb: 1 }}>
+      <Typography variant="body2" color="text.secondary">
+        Registros: <b>{detailRows.length}</b> — Unidades:{" "}
+        <b>{detailRows.reduce((a, r) => a + (Number(r.units) || 0), 0)}</b>
+      </Typography>
+    </Stack>
+
+    {/* Contenedor con altura limitada + scroll y stickyHeader */}
+    <Box sx={{ maxHeight: 560, overflow: "auto" }}>
+      <Table size="small" stickyHeader>
+        <TableHead>
+          <TableRow>
+            <TableCell />
+            <TableCell>Supervisor / Especialistas</TableCell>
+            <TableCell>Clasificación</TableCell>
+            <TableCell>Scrap Group</TableCell>
+            <TableCell>Estación</TableCell>
+            <TableCell align="right">Unidades</TableCell>
+          </TableRow>
+        </TableHead>
+
+        <TableBody>
+          {Object.entries(
+            detailRows.reduce((acc, r) => {
+              const sup = r.supervisor ?? "N/D";
+              (acc[sup] ??= []).push(r);
+              return acc;
+            }, {} as Record<string, ScrapRow[]>)
+          )
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([sup, rows]) => (
+              <SupervisorRow key={sup} supervisor={sup} rows={rows} />
+            ))}
+        </TableBody>
+      </Table>
+    </Box>
+  </DialogContent>
+</Dialog>
+
+      </Dialog>
     </LocalizationProvider>
   );
 }
