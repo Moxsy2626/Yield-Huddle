@@ -1,0 +1,1 @@
+export default function WeeklyPage() { return <h2>Dashboard Semanal</h2> }

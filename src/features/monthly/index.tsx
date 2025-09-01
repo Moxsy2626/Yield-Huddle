@@ -1,0 +1,1 @@
+export default function MonthlyPage() { return <h2>Dashboard Mensual</h2> }
