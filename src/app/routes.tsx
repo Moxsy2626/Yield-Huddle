@@ -11,6 +11,8 @@ import WeeklyPage from '@/features/weekly';
 import MonthlyPage from '@/features/monthly';
 import MinutesPage from '@/modules/minutes';
 import UndefinedUnitsPage from '@/modules/undefined';
+import DataPage from "@/features/data/DataPage";
+import TableChartRoundedIcon from "@mui/icons-material/TableChartRounded";
 
 export type AppRoute = {
   path: string;
@@ -27,6 +29,7 @@ export const ROUTES: AppRoute[] = [
   { path: '/mensual',     title: 'Mensual',           element: <MonthlyPage />,        icon: <CalendarMonthIcon />,    drawer: true },
   { path: '/minuta',      title: 'Minuta',            element: <MinutesPage />,        icon: <ListAltIcon />,          drawer: true },
   { path: '/sin-clasif',  title: 'Sin clasificación', element: <UndefinedUnitsPage />, icon: <ReportProblemIcon />,    drawer: true },
+  { path: "/datos", title: 'Data', element: <DataPage /> , icon: <TableChartRoundedIcon /> ,    drawer: true}, 
 ];
 
 export default ROUTES;

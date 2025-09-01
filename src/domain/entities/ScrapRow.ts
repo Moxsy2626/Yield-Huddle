@@ -1,5 +1,6 @@
 // src/domain/entities/ScrapRow.ts
 export interface ScrapRow {
+  unitDetails: any;
   id: string | number;
   scrapGroup?: string;
   classification?: string;

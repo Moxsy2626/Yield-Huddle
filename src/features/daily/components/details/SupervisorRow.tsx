@@ -152,7 +152,7 @@ export const SupervisorRow: React.FC<{ supervisor: string; rows: ScrapRow[] }> =
   supervisor,
   rows,
 }) => {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const theme = useTheme();
   const totalUnits = rows.reduce((a, r) => a + (Number(r.units) || 0), 0);
 
