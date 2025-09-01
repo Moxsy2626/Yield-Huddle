@@ -1,22 +1,3 @@
-<<<<<<< HEAD
-export type Shift = 'A' | 'B' | 'C'
-export type Classification = 'Handling' | 'Workmanship' | 'Technical' | 'Training'
-
-export interface ScrapEntry {
-  id: string
-  container: string
-  scrapDate: string  // ISO
-  code: string
-  scrapReason: string
-  scrapGroup?: string
-  classification?: Classification
-  subgroup?: string
-  finding?: string
-  turnoRootCause?: Shift
-  estacionRootCause?: string
-  personaRootCause?: string
-  assessedBy?: string
-=======
 // src/entities/scrap.ts
 
 /**
@@ -78,5 +59,4 @@ export interface IScrapRepo {
    * Registros de un mes. monthISO = 'YYYY-MM'
    */
   fetchMonthly(monthISO: string): Promise<ScrapEntry[]>;
->>>>>>> bbeff7aa87bc1a5e13421671f4fbc480de4b59ee
 }

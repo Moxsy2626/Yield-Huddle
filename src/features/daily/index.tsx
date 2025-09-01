@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-export default function DailyPage() { return <h2>Dashboard Diario</h2> }
-=======
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
@@ -23,4 +20,3 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </ThemeProvider>
   </React.StrictMode>
 );
->>>>>>> bbeff7aa87bc1a5e13421671f4fbc480de4b59ee
