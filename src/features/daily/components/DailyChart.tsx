@@ -1,5 +1,19 @@
 // src/features/daily/components/DailyChart.tsx
+<<<<<<< HEAD
 import React from "react";
+=======
+import React, { useMemo } from "react";
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Box,
+  alpha,
+  useTheme,
+} from "@mui/material";
+=======
+import * as React from 'react';
+>>>>>>> bcbe23577914e7c1fe9a130ba93e0acc93c5db5c
 import {
   ResponsiveContainer,
   BarChart,
@@ -147,6 +161,7 @@ export default function DailyChart({
           boxShadow: `0 8px 24px ${alpha(theme.palette.common.black, 0.08)}`,
           overflow: "hidden",
         }}
+<<<<<<< HEAD
       >
         <CardHeader
           title={title}
@@ -183,5 +198,75 @@ export default function DailyChart({
         </DialogContent>
       </Dialog>
     </>
+=======
+      />
+      <CardContent>
+        <Box sx={{ height }}>
+          <ResponsiveContainer>
+            <BarChart data={data} barCategoryGap={26}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip formatter={tooltipFormatter} />
+              <Bar
+                dataKey="cantidad"
+                isAnimationActive={false} // sin animación
+                cursor={onBarClick ? "pointer" : "default"}
+                onClick={
+                  onBarClick
+                    ? (d: any) => {
+                        const group = String(d?.payload?.label ?? "");
+                        onBarClick({ group, rows: byGroup[group] ?? [] });
+                      }
+                    : undefined
+                }
+                fill={alpha(theme.palette.primary.main, 0.85)} // fallback (nunca negro)
+              >
+                {colorBy
+                  ? data.map((d, i) => (
+                      <Cell key={i} fill={colorBy(d.label)} />
+                    ))
+                  : null}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Box>
+      </CardContent>
+    </Card>
+=======
+} from 'recharts';
+import type { ScrapEntry } from '@/entities/scrap';
+
+interface Props {
+  rows: ScrapEntry[];
+}
+
+export default function DailyChart({ rows }: Props) {
+  const data = React.useMemo(() => {
+    // Agregar unidades por clasificación
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      map.set(r.classification, (map.get(r.classification) ?? 0) + r.units);
+    }
+    return Array.from(map.entries()).map(([classification, units]) => ({
+      classification,
+      units,
+    }));
+  }, [rows]);
+
+  return (
+    <div style={{ height: 280, width: '100%' }}>
+      <ResponsiveContainer>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="classification" />
+          <YAxis />
+          <Tooltip />
+          <Bar dataKey="units" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+
+>>>>>>> bcbe23577914e7c1fe9a130ba93e0acc93c5db5c
   );
 }
