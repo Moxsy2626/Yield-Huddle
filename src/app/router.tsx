@@ -1,12 +1,18 @@
-import { createBrowserRouter } from 'react-router-dom'
-import AppShell from './AppShell'
-import { ROUTES } from './routes'
-import NotFound from '../shared/NotFound'   // usa relativo si el alias @ aún no está
+import { createBrowserRouter } from 'react-router-dom';
+import AppShell from './AppShell';
+import ROUTES from './routes';
 
+// Puedes cambiar a createHashRouter si lo usas con Tauri
 export const router = createBrowserRouter([
   {
+    path: '/',
     element: <AppShell />,
-    children: ROUTES.map(r => ({ path: r.path, element: r.element })),
+    children: [
+      { index: true, element: ROUTES[0].element }, // Diario
+      ...ROUTES.slice(1).map(r => ({ path: r.path.replace(/^\//, ''), element: r.element })),
+      { path: '*', element: <div style={{ padding: 24 }}>No encontrado</div> },
+    ],
   },
-  { path: '*', element: <NotFound /> },
-])
+]);
+
+export default router;

@@ -4,12 +4,17 @@ import {
   AppBar, Toolbar, Drawer, List, ListItemButton, ListItemIcon, ListItemText,
   CssBaseline, Box, Typography
 } from '@mui/material'
+import { useEffect } from 'react';
+
 
 const drawerWidth = 260
 
 export default function AppShell() {
   const { pathname } = useLocation()
+useEffect(() => {
+    // Crea datos iniciales solo si la DB está vacía
 
+  }, []);
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
