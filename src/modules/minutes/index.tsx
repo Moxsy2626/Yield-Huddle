@@ -1,0 +1,1 @@
+export default function MinutesPage() { return <h2>Minuta</h2> }

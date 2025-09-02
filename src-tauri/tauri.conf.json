@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "scrap-control",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.moxsy.scrapcontrol",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:5173",
@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Yield Huddle",
-        "width": 800,
-        "height": 600,
+        "width": 1280,
+        "height": 800,
         "resizable": true,
         "fullscreen": false
       }
